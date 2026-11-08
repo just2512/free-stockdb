@@ -30,6 +30,37 @@
 
 namespace stockdb {
 
+// Decode application/x-www-form-urlencoded query components. The HTTP
+// client percent-encodes UTF-8 keys such as 日k; without this step the
+// server searches for the literal percent characters and returns not_found.
+static std::string url_decode(const std::string& input) {
+    std::string output;
+    output.reserve(input.size());
+    for (size_t i = 0; i < input.size(); ++i) {
+        if (input[i] == '+' ) {
+            output.push_back(' ');
+        } else if (input[i] == '%' && i + 2 < input.size()) {
+            auto hex = [](char ch) -> int {
+                if (ch >= '0' && ch <= '9') return ch - '0';
+                if (ch >= 'a' && ch <= 'f') return ch - 'a' + 10;
+                if (ch >= 'A' && ch <= 'F') return ch - 'A' + 10;
+                return -1;
+            };
+            const int hi = hex(input[i + 1]);
+            const int lo = hex(input[i + 2]);
+            if (hi >= 0 && lo >= 0) {
+                output.push_back(static_cast<char>((hi << 4) | lo));
+                i += 2;
+            } else {
+                output.push_back(input[i]);
+            }
+        } else {
+            output.push_back(input[i]);
+        }
+    }
+    return output;
+}
+
 // ---------------------------------------------------------------------------
 // LevelDB 存储引擎封装
 // ---------------------------------------------------------------------------
@@ -262,7 +293,8 @@ private:
             while (std::getline(qs, pair, '&')) {
                 size_t eq = pair.find('=');
                 if (eq != std::string::npos)
-                    params[pair.substr(0, eq)] = pair.substr(eq + 1);
+                    params[url_decode(pair.substr(0, eq))] =
+                        url_decode(pair.substr(eq + 1));
             }
         }
 
